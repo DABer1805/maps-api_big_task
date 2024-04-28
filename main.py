@@ -12,7 +12,7 @@ LATITUDE_STEP = 0.005
 LONGITUDE_STEP = 0.005
 FPS = 60  # Частота кадров
 
-WIDTH, HEIGHT = 600, 450
+WIDTH, HEIGHT = 600, 514
 
 COLOR_ACTIVE = pygame.Color('#ffeba0')
 COLOR_PASSIVE = pygame.Color('#e6e6e6')
@@ -41,21 +41,26 @@ map_image = pygame.image.load(BytesIO(response.content))
 # Создаем окно Pygame
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Большая задача по Maps API. Часть №5")
+pygame.display.set_caption("Большая задача по Maps API. Часть №7")
 
 base_font = pygame.font.Font(None, 32)
 user_text = ''
 
 # Поле ввода
 input_rect = pygame.Rect(0, 0, WIDTH, 32)
+# Кнопка сброса
+reset_button = pygame.Rect(0, 32, WIDTH, 32)
 
-color = COLOR_PASSIVE
+input_rect_color = COLOR_PASSIVE
+reset_button_color = COLOR_PASSIVE
 
 # Активно ли поле ввода
-active = False
+input_rect_active = False
+# Активна ли кнопка сброса
+reset_button_active = False
 
 # Отображаем карту в окне
-screen.blit(map_image, (0, 0))
+screen.blit(map_image, (0, 64))
 pygame.display.flip()
 
 clock = pygame.time.Clock()
@@ -74,7 +79,7 @@ def update_map(latitude, longitude, zoom, layer):
     # Грузим обновленную картинку
     map_image = pygame.image.load(BytesIO(response.content))
     # Отображаем обновленную карту в окне
-    screen.blit(map_image, (0, 0))
+    screen.blit(map_image, (0, 64))
 
 
 def move_map(latitude, longitude, zoom, layer, direction=None):
@@ -134,10 +139,16 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if input_rect.collidepoint(event.pos):
-                active = True
+            if reset_button.collidepoint(event.pos):
+                reset_button_active = True
+                point = None
+                update_map(latitude, longitude, zoom, current_layer)
             else:
-                active = False
+                reset_button_active = False
+            if input_rect.collidepoint(event.pos):
+                input_rect_active = True
+            else:
+                input_rect_active = False
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_PAGEUP:
                 # Увеличиваем масштаб
@@ -179,21 +190,34 @@ while running:
                 if len(user_text) < 47:
                     user_text += event.unicode
 
-        if active:
-            color = COLOR_ACTIVE
+        if input_rect_active:
+            input_rect_color = COLOR_ACTIVE
         else:
-            color = COLOR_PASSIVE
+            input_rect_color = COLOR_PASSIVE
+
+        if reset_button_active:
+            reset_button_color = COLOR_ACTIVE
+        else:
+            reset_button_color = COLOR_PASSIVE
 
         # Рисуем поле ввода
-        pygame.draw.rect(screen, color, input_rect)
+        pygame.draw.rect(screen, input_rect_color, input_rect)
+        # Рисуем кнопку сброса
+        pygame.draw.rect(screen, reset_button_color, reset_button)
 
         # Текст
         text_surface = base_font.render(
             user_text, True, FONT_COLOR
         )
+        # Текст кнопки сброса
+        reset_button_text_surface = base_font.render(
+            'Сбросить результаты поиска', True, FONT_COLOR
+        )
 
-        # Отображаем наше поле ввода
+        # Отображаем текст нашего поля ввода
         screen.blit(text_surface, (input_rect.x + 5, input_rect.y + 5))
+        # Отображаем текст кнопки
+        screen.blit(reset_button_text_surface, (136, 37))
 
         # Ограничение частоты кадров
         pygame.display.flip()
