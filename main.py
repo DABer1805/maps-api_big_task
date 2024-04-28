@@ -2,6 +2,8 @@ import pygame
 import requests
 from io import BytesIO
 
+# ул. Петровка, 38, стр. 9, Москва - пример для теста почтового индекса
+
 # Задаем координаты, масштаб и предельные значения карты
 latitude = 55.75396
 longitude = 37.620393
@@ -12,12 +14,16 @@ LATITUDE_STEP = 0.005
 LONGITUDE_STEP = 0.005
 FPS = 60  # Частота кадров
 
-WIDTH, HEIGHT = 600, 546
+WIDTH, HEIGHT = 600, 578
 
 COLOR_ACTIVE = pygame.Color('#ffeba0')
 COLOR_PASSIVE = pygame.Color('#e6e6e6')
 
+POSTAL_COLOR_ACTIVE = pygame.Color('#c8ffa0')
+POSTAL_COLOR_PASSIVE = pygame.Color('#ffa0a0')
+
 FONT_COLOR = pygame.Color('#9b9a95')
+POSTAL_CODE_FONT_COLOR = pygame.Color('white')
 
 UP = 0
 DOWN = 1
@@ -41,7 +47,7 @@ map_image = pygame.image.load(BytesIO(response.content))
 # Создаем окно Pygame
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Большая задача по Maps API. Часть №8")
+pygame.display.set_caption("Большая задача по Maps API. Часть №9")
 
 base_font = pygame.font.Font(None, 32)
 user_text = ''
@@ -53,6 +59,10 @@ input_rect = pygame.Rect(0, 0, WIDTH, 32)
 address_rect = pygame.Rect(0, 32, WIDTH, 32)
 # Кнопка сброса
 reset_button = pygame.Rect(0, 64, WIDTH, 32)
+# Переключатель почтового индекса
+postal_code_button = pygame.Rect(0, 96, WIDTH, 32)
+
+postal_code_button_color = POSTAL_COLOR_PASSIVE
 
 input_rect_color = COLOR_PASSIVE
 reset_button_color = COLOR_PASSIVE
@@ -61,9 +71,11 @@ reset_button_color = COLOR_PASSIVE
 input_rect_active = False
 # Активна ли кнопка сброса
 reset_button_active = False
+# Активно ли приписывание почтового индекса
+postal_code_on = False
 
 # Отображаем карту в окне
-screen.blit(map_image, (0, 96))
+screen.blit(map_image, (0, 128))
 pygame.display.flip()
 
 clock = pygame.time.Clock()
@@ -82,7 +94,7 @@ def update_map(latitude, longitude, zoom, layer):
     # Грузим обновленную картинку
     map_image = pygame.image.load(BytesIO(response.content))
     # Отображаем обновленную карту в окне
-    screen.blit(map_image, (0, 96))
+    screen.blit(map_image, (0, 128))
 
 
 def move_map(latitude, longitude, zoom, layer, direction=None):
@@ -124,17 +136,26 @@ def find_object(latitude, longitude, zoom, layer, query):
     if response.get("response"):
         # Получаем координаты объекта
         object_data = response["response"]["GeoObjectCollection"][
-            "featureMember"][0]["GeoObject"]
-        address_text = object_data["metaDataProperty"]["GeocoderMetaData"][
-            "Address"]["formatted"]
-        coords = object_data["Point"]["pos"].split()
-        longitude = float(coords[0])
-        latitude = float(coords[1])
-        point = f'{longitude},{latitude},comma'
-        # Перемещаем карту на центральную точку объекта
-        update_map(
-            latitude, longitude, zoom, layer,
-        )
+            "featureMember"]
+        if object_data:
+            object_first = object_data[0]["GeoObject"]
+            address = object_first["metaDataProperty"]["GeocoderMetaData"][
+                "Address"]
+            address_text = address["formatted"]
+            if postal_code_on:
+                postal_code = address.get('postal_code')
+                if postal_code:
+                    address_text += f',{postal_code}'
+            coords = object_first["Point"]["pos"].split()
+            longitude = float(coords[0])
+            latitude = float(coords[1])
+            point = f'{longitude},{latitude},comma'
+            # Перемещаем карту на центральную точку объекта
+            update_map(
+                latitude, longitude, zoom, layer,
+            )
+        else:
+            address_text = 'Не найдено :('
     return latitude, longitude
 
 
@@ -157,6 +178,8 @@ while running:
                 input_rect_active = True
             else:
                 input_rect_active = False
+            if postal_code_button.collidepoint(event.pos):
+                postal_code_on = not postal_code_on
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_PAGEUP:
                 # Увеличиваем масштаб
@@ -208,12 +231,20 @@ while running:
         else:
             reset_button_color = COLOR_PASSIVE
 
+        if postal_code_on:
+            postal_code_button_color = POSTAL_COLOR_ACTIVE
+        else:
+            postal_code_button_color = POSTAL_COLOR_PASSIVE
+
         # Рисуем поле ввода
         pygame.draw.rect(screen, input_rect_color, input_rect)
         # Рисуем поле вывода адреса найденного объекта
         pygame.draw.rect(screen, COLOR_PASSIVE, address_rect)
         # Рисуем кнопку сброса
         pygame.draw.rect(screen, reset_button_color, reset_button)
+        # Рисуем кнопку переключателя почтового индекса
+        pygame.draw.rect(screen, postal_code_button_color,
+                         postal_code_button)
 
         # Текст поля ввода
         text_surface = base_font.render(
@@ -227,6 +258,10 @@ while running:
         reset_button_text_surface = base_font.render(
             'Сбросить результаты поиска', True, FONT_COLOR
         )
+        # Текст кнопки переключателя почтового индекса
+        postal_code_text_surface = base_font.render(
+            'Почтовый индекс', True, POSTAL_CODE_FONT_COLOR
+        )
 
         # Отображаем текст нашего поля ввода
         screen.blit(text_surface, (input_rect.x + 5, input_rect.y + 5))
@@ -234,6 +269,8 @@ while running:
         screen.blit(address_text_surface, (address_rect.x + 5, 37))
         # Отображаем текст кнопки
         screen.blit(reset_button_text_surface, (136, 69))
+        # Отображаем текст кнопки переключателя почтового индекса
+        screen.blit(postal_code_text_surface, (189, 101))
 
         # Ограничение частоты кадров
         pygame.display.flip()
