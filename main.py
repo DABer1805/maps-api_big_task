@@ -12,7 +12,7 @@ LATITUDE_STEP = 0.005
 LONGITUDE_STEP = 0.005
 FPS = 60  # Частота кадров
 
-WIDTH, HEIGHT = 600, 514
+WIDTH, HEIGHT = 600, 546
 
 COLOR_ACTIVE = pygame.Color('#ffeba0')
 COLOR_PASSIVE = pygame.Color('#e6e6e6')
@@ -41,15 +41,18 @@ map_image = pygame.image.load(BytesIO(response.content))
 # Создаем окно Pygame
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Большая задача по Maps API. Часть №7")
+pygame.display.set_caption("Большая задача по Maps API. Часть №8")
 
 base_font = pygame.font.Font(None, 32)
 user_text = ''
+address_text = ''
 
 # Поле ввода
 input_rect = pygame.Rect(0, 0, WIDTH, 32)
+# Поле вывода для адреса найденного объекта
+address_rect = pygame.Rect(0, 32, WIDTH, 32)
 # Кнопка сброса
-reset_button = pygame.Rect(0, 32, WIDTH, 32)
+reset_button = pygame.Rect(0, 64, WIDTH, 32)
 
 input_rect_color = COLOR_PASSIVE
 reset_button_color = COLOR_PASSIVE
@@ -60,7 +63,7 @@ input_rect_active = False
 reset_button_active = False
 
 # Отображаем карту в окне
-screen.blit(map_image, (0, 64))
+screen.blit(map_image, (0, 96))
 pygame.display.flip()
 
 clock = pygame.time.Clock()
@@ -79,7 +82,7 @@ def update_map(latitude, longitude, zoom, layer):
     # Грузим обновленную картинку
     map_image = pygame.image.load(BytesIO(response.content))
     # Отображаем обновленную карту в окне
-    screen.blit(map_image, (0, 64))
+    screen.blit(map_image, (0, 96))
 
 
 def move_map(latitude, longitude, zoom, layer, direction=None):
@@ -113,7 +116,7 @@ def change_layer(latitude, longitude, zoom, layer):
 
 
 def find_object(latitude, longitude, zoom, layer, query):
-    global point
+    global point, address_text
     # Формируем URL запрос для поиска объекта
     url = f"https://geocode-maps.yandex.ru/1.x/?apikey={API_KEY}" \
           f"&geocode={query}&format=json"
@@ -121,9 +124,12 @@ def find_object(latitude, longitude, zoom, layer, query):
     if response.get("response"):
         # Получаем координаты объекта
         object_data = response["response"]["GeoObjectCollection"][
-            "featureMember"][0]["GeoObject"]["Point"]["pos"].split()
-        longitude = float(object_data[0])
-        latitude = float(object_data[1])
+            "featureMember"][0]["GeoObject"]
+        address_text = object_data["metaDataProperty"]["GeocoderMetaData"][
+            "Address"]["formatted"]
+        coords = object_data["Point"]["pos"].split()
+        longitude = float(coords[0])
+        latitude = float(coords[1])
         point = f'{longitude},{latitude},comma'
         # Перемещаем карту на центральную точку объекта
         update_map(
@@ -142,6 +148,8 @@ while running:
             if reset_button.collidepoint(event.pos):
                 reset_button_active = True
                 point = None
+                user_text = ''
+                address_text = ''
                 update_map(latitude, longitude, zoom, current_layer)
             else:
                 reset_button_active = False
@@ -202,12 +210,18 @@ while running:
 
         # Рисуем поле ввода
         pygame.draw.rect(screen, input_rect_color, input_rect)
+        # Рисуем поле вывода адреса найденного объекта
+        pygame.draw.rect(screen, COLOR_PASSIVE, address_rect)
         # Рисуем кнопку сброса
         pygame.draw.rect(screen, reset_button_color, reset_button)
 
-        # Текст
+        # Текст поля ввода
         text_surface = base_font.render(
             user_text, True, FONT_COLOR
+        )
+        # Текст полного адреса найденного объекта
+        address_text_surface = base_font.render(
+            address_text, True, FONT_COLOR
         )
         # Текст кнопки сброса
         reset_button_text_surface = base_font.render(
@@ -216,8 +230,10 @@ while running:
 
         # Отображаем текст нашего поля ввода
         screen.blit(text_surface, (input_rect.x + 5, input_rect.y + 5))
+        # Отображаем текст адреса
+        screen.blit(address_text_surface, (address_rect.x + 5, 37))
         # Отображаем текст кнопки
-        screen.blit(reset_button_text_surface, (136, 37))
+        screen.blit(reset_button_text_surface, (136, 69))
 
         # Ограничение частоты кадров
         pygame.display.flip()
