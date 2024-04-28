@@ -60,14 +60,16 @@ pygame.display.flip()
 
 clock = pygame.time.Clock()
 
+point = None
 
-def update_map(latitude, longitude, zoom, layer, points=None):
+
+def update_map(latitude, longitude, zoom, layer):
     # Формируем новый URL запрос
     url = f"https://static-maps.yandex.ru/1.x/" \
           f"?ll={longitude},{latitude}&z={zoom}&l=" \
           f"{LAYERS[layer]}"
-    if points:
-        url += f"&pt={'~'.join(points)}"
+    if point:
+        url += f"&pt={point}"
     response = requests.get(url)
     # Грузим обновленную картинку
     map_image = pygame.image.load(BytesIO(response.content))
@@ -106,6 +108,7 @@ def change_layer(latitude, longitude, zoom, layer):
 
 
 def find_object(latitude, longitude, zoom, layer, query):
+    global point
     # Формируем URL запрос для поиска объекта
     url = f"https://geocode-maps.yandex.ru/1.x/?apikey={API_KEY}" \
           f"&geocode={query}&format=json"
@@ -116,10 +119,10 @@ def find_object(latitude, longitude, zoom, layer, query):
             "featureMember"][0]["GeoObject"]["Point"]["pos"].split()
         longitude = float(object_data[0])
         latitude = float(object_data[1])
+        point = f'{longitude},{latitude},comma'
         # Перемещаем карту на центральную точку объекта
         update_map(
             latitude, longitude, zoom, layer,
-            [f'{longitude},{latitude},comma']
         )
     return latitude, longitude
 
