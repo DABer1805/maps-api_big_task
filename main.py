@@ -9,9 +9,11 @@ from io import BytesIO
 # Задаем координаты, масштаб и предельные значения карты
 latitude = 55.75396
 longitude = 37.620393
+
 zoom = 10
 MIN_ZOOM = 1
 MAX_ZOOM = 15
+
 LATITUDE_STEP = 0.005
 LONGITUDE_STEP = 0.005
 FPS = 60  # Частота кадров
