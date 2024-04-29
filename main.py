@@ -34,7 +34,13 @@ DOWN = 1
 RIGHT = 2
 LEFT = 3
 
+DISTANCE = 500  # Область поиска заданного объекта в метрах (поставил не 50
+# как в условиях, так как это ну слишком мало, чтоб объект нашелся надо зум
+# выкрутить на фулл и ткнуть прям рядом, смысл от данной операции тогда
+# теряется)
+
 API_KEY = "40d1649f-0493-4b70-98ba-98533de7710b"
+SEARCH_API_KEY = "dda3ddba-c9ea-4ead-9010-f43fbc15c6e3"
 
 # Слои карты
 LAYERS = ["map", "sat", "sat,skl"]
@@ -51,7 +57,7 @@ map_image = pygame.image.load(BytesIO(response.content))
 # Создаем окно Pygame
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Большая задача по Maps API. Часть №10")
+pygame.display.set_caption("Большая задача по Maps API. Часть №12")
 
 base_font = pygame.font.Font(None, 32)
 address_font = pygame.font.Font(None, 17)
@@ -133,6 +139,35 @@ def change_layer(latitude, longitude, zoom, layer):
     return layer
 
 
+def find_organization(
+        latitude, longitude, zoom, layer, query, old_latitude,
+        old_longitude
+):
+    global point, address_text, postal_code, user_text
+    url = f"https://search-maps.yandex.ru/v1/?text={query}" \
+          f"&ll={longitude},{latitude}&type=biz&" \
+          f"lang=ru_RU&apikey={SEARCH_API_KEY}"
+    response = requests.get(url).json()
+    if response.get("features"):
+        coords = response["features"][0]["geometry"]["coordinates"]
+        if check_distance(coords, (longitude, latitude)):
+            object_data = response["features"][0][
+                "properties"]["CompanyMetaData"]
+            object_address = object_data["address"]
+            address_text = object_address
+            postal_code = ''
+            point = f'{coords[0]},{coords[1]},comma'
+            # Ставим точку найденного объекта на карту, но не сдвигаем ее
+            update_map(
+                old_latitude, old_longitude, zoom, layer,
+            )
+    else:
+        point = None
+        user_text = ''
+        address_text = ''
+        postal_code = ''
+
+
 def find_object(
         latitude, longitude, zoom, layer, query=None, old_latitude=None,
         old_longitude=None
@@ -190,6 +225,27 @@ def mouse_to_geo(lattitude, longitude, x, y, zoom):
     return lattitude, longitude
 
 
+def check_distance(a, b):
+    degree_to_meters_factor = 111 * 1000  # 111 километров в метрах
+    a_lon, a_lat = a
+    b_lon, b_lat = b
+
+    # Берем среднюю по широте точку и считаем коэффициент для нее.
+    radians_lattitude = math.radians((a_lat + b_lat) / 2.)
+    lat_lon_factor = math.cos(radians_lattitude)
+
+    # Вычисляем смещения в метрах по вертикали и горизонтали.
+    dx = abs(a_lon - b_lon) * degree_to_meters_factor * lat_lon_factor
+    dy = abs(a_lat - b_lat) * degree_to_meters_factor
+
+    # Вычисляем расстояние между точками.
+    distance = math.sqrt(dx * dx + dy * dy)
+
+    print(distance)
+
+    return distance <= DISTANCE
+
+
 # Основной цикл приложения
 running = True
 while running:
@@ -228,6 +284,17 @@ while running:
                         if len(splited_address) > 1 and \
                                 splited_address[-1].isdigit():
                             address_text = ''
+            elif event.button == 3:
+                x, y = pygame.mouse.get_pos()
+                if y > 128:
+                    mouse_latitude, mouse_longitude = mouse_to_geo(
+                        latitude, longitude, x, y, zoom
+                    )
+                    # Поиск объекта по координатам
+                    find_organization(
+                        mouse_latitude, mouse_longitude, zoom,
+                        current_layer, user_text, latitude, longitude
+                    )
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_PAGEUP:
                 # Увеличиваем масштаб
@@ -259,10 +326,11 @@ while running:
                 current_layer = change_layer(latitude, longitude, zoom,
                                              current_layer)
             elif event.key == pygame.K_RSHIFT:
-                # Поиск объекта
-                latitude, longitude = find_object(
-                    latitude, longitude, zoom, current_layer, user_text
-                )
+                if user_text:
+                    # Поиск объекта
+                    latitude, longitude = find_object(
+                        latitude, longitude, zoom, current_layer, user_text
+                    )
             elif event.key == pygame.K_BACKSPACE:
                 user_text = user_text[:-1]
             else:
