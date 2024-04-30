@@ -7,6 +7,10 @@ from io import BytesIO
 # Увеличен размер экрана, чтоб индекс мог залезть в строку вывода (ну если
 # я правильно понял в чём проблема :) )
 
+# Теперь, если кликать по переключателю почтового индекса, то он будет
+# автоматически добавляться / убираться, без необходимости заново
+# производить поиск по кнопке
+
 # ул. Петровка, 38, стр. 9, Москва - пример для теста почтового индекса
 
 # Задаем координаты, масштаб и предельные значения карты
@@ -30,14 +34,14 @@ POSTAL_COLOR_PASSIVE = pygame.Color('#ffa0a0')
 FONT_COLOR = pygame.Color('#9b9a95')
 POSTAL_CODE_FONT_COLOR = pygame.Color('white')
 
+COORD_TO_GEO_X, COORD_TO_GEO_Y = 0.0000428, 0.0000428
+
 UP = 0
 DOWN = 1
 RIGHT = 2
 LEFT = 3
 
 API_KEY = "40d1649f-0493-4b70-98ba-98533de7710b"
-
-COORD_TO_GEO_X, COORD_TO_GEO_Y = 0.0000428, 0.0000428
 
 # Слои карты
 LAYERS = ["map", "sat", "sat,skl"]
@@ -54,11 +58,12 @@ map_image = pygame.image.load(BytesIO(response.content))
 # Создаем окно Pygame
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Большая задача по Maps API. Часть №9")
+pygame.display.set_caption("Большая задача по Maps API. Часть №10")
 
 base_font = pygame.font.Font(None, 32)
 user_text = ''
 address_text = ''
+postal_code = ''
 
 # Поле ввода
 input_rect = pygame.Rect(0, 0, WIDTH, 32)
@@ -147,38 +152,6 @@ def change_layer(latitude, longitude, zoom, layer):
     return layer
 
 
-def find_object(latitude, longitude, zoom, layer, query):
-    global point, address_text
-    # Формируем URL запрос для поиска объекта
-    url = f"https://geocode-maps.yandex.ru/1.x/?apikey={API_KEY}" \
-          f"&geocode={query}&format=json"
-    response = requests.get(url).json()
-    if response.get("response"):
-        # Получаем координаты объекта
-        object_data = response["response"]["GeoObjectCollection"][
-            "featureMember"]
-        if object_data:
-            object_first = object_data[0]["GeoObject"]
-            address = object_first["metaDataProperty"]["GeocoderMetaData"][
-                "Address"]
-            address_text = address["formatted"]
-            if postal_code_on:
-                postal_code = address.get('postal_code')
-                if postal_code:
-                    address_text += f',{postal_code}'
-            coords = object_first["Point"]["pos"].split()
-            longitude = float(coords[0])
-            latitude = float(coords[1])
-            point = f'{longitude},{latitude},comma'
-            # Перемещаем карту на центральную точку объекта
-            update_map(
-                latitude, longitude, zoom, layer,
-            )
-        else:
-            address_text = 'Не найдено :('
-    return latitude, longitude
-
-
 def mouse_to_geo(lattitude, longitude, x, y, zoom):
     """ Перевод координат мышки в координаты карты """
     dy = (HEIGHT + 128) // 2 - y
@@ -193,6 +166,35 @@ def mouse_to_geo(lattitude, longitude, x, y, zoom):
     return lattitude, longitude
 
 
+def find_object(latitude, longitude, zoom, layer, query):
+    global point, address_text, postal_code
+    # Формируем URL запрос для поиска объекта
+    url = f"https://geocode-maps.yandex.ru/1.x/?apikey={API_KEY}" \
+          f"&geocode={query}&format=json"
+    response = requests.get(url).json()
+    if response.get("response"):
+        # Получаем координаты объекта
+        object_data = response["response"]["GeoObjectCollection"][
+            "featureMember"]
+        if object_data:
+            object_first = object_data[0]["GeoObject"]
+            address = object_first["metaDataProperty"]["GeocoderMetaData"][
+                "Address"]
+            address_text = address["formatted"]
+            postal_code = address.get('postal_code')
+            coords = object_first["Point"]["pos"].split()
+            longitude = float(coords[0])
+            latitude = float(coords[1])
+            point = f'{longitude},{latitude},comma'
+            # Перемещаем карту на центральную точку объекта
+            update_map(
+                latitude, longitude, zoom, layer,
+            )
+        else:
+            address_text = 'Не найдено :('
+    return latitude, longitude
+
+
 # Основной цикл приложения
 running = True
 while running:
@@ -205,6 +207,7 @@ while running:
                 point = None
                 user_text = ''
                 address_text = ''
+                postal_code = ''
                 update_map(latitude, longitude, zoom, current_layer)
             else:
                 reset_button_active = False
@@ -214,6 +217,10 @@ while running:
                 input_rect_active = False
             if postal_code_button.collidepoint(event.pos):
                 postal_code_on = not postal_code_on
+                splited_address = address_text.split(',')
+                if len(splited_address) > 1 and \
+                        splited_address[-1].isdigit():
+                    address_text = ''
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_PAGEUP:
                 # Увеличиваем масштаб
@@ -253,7 +260,9 @@ while running:
                 user_text = user_text[:-1]
             else:
                 if len(user_text) < 47:
-                    user_text += event.unicode
+                    char = event.unicode
+                    if char.isalnum() or char in (' ', ',', '.'):
+                        user_text += event.unicode
 
         screen.fill(COLOR_PASSIVE)
         screen.blit(map_image, (WIDTH * 0.25, 128))
@@ -287,9 +296,14 @@ while running:
         text_surface = base_font.render(
             user_text, True, FONT_COLOR
         )
+
+        full_adrress = address_text
+        if postal_code_on and postal_code:
+            full_adrress += f', {postal_code}'
+
         # Текст полного адреса найденного объекта
         address_text_surface = base_font.render(
-            address_text, True, FONT_COLOR
+            full_adrress, True, FONT_COLOR
         )
         # Текст кнопки сброса
         reset_button_text_surface = base_font.render(
